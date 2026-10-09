@@ -1,4 +1,4 @@
-const CACHE_NAME = 'contatori-pwa-v1';
+const CACHE_NAME = 'contatori-pwa-v1.1';
 const ASSETS = [
   './',
   './index.html',
