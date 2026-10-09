@@ -11,20 +11,66 @@
 
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: #f4f6f8; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f4f6f8; padding: 20px; display: flex; flex-direction: column; align-items: center; user-select: none; }
     h2 { margin-bottom: 15px; color: #333; }
     
     .add-bar { display: flex; gap: 10px; width: 100%; max-width: 400px; margin-bottom: 20px; }
     .add-bar input { flex: 1; padding: 10px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
     .btn-add { padding: 10px 16px; font-size: 1rem; border: none; border-radius: 6px; background: #28a745; color: white; font-weight: bold; cursor: pointer; }
 
-    .card { background: white; border-radius: 8px; padding: 16px; margin-bottom: 12px; width: 100%; max-width: 400px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; }
-    .card-title { font-weight: 600; color: #495057; word-break: break-word; flex: 1; padding-right: 10px; }
+    .card { 
+      background: white; 
+      border-radius: 8px; 
+      padding: 12px 16px; 
+      margin-bottom: 12px; 
+      width: 100%; 
+      max-width: 400px; 
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08); 
+      display: flex; 
+      align-items: center; 
+      gap: 12px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
     
-    .controls { display: flex; align-items: center; gap: 8px; }
+    /* Stile per l'elemento durante il drag */
+    .card.dragging {
+      opacity: 0.5;
+      transform: scale(0.98);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+    }
+
+    .drag-handle {
+      cursor: grab;
+      font-size: 1.4rem;
+      color: #aaa;
+      padding: 4px 6px 4px 0;
+      touch-action: none;
+    }
+    .drag-handle:active { cursor: grabbing; }
+
+    .card-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+    .card-title { font-weight: 600; color: #333; word-break: break-word; }
+    
+    /* Nota/Data sotto al titolo */
+    .card-note { 
+      font-size: 0.8rem; 
+      color: #6c757d; 
+      outline: none;
+      border-bottom: 1px dashed transparent;
+      padding: 1px 2px;
+      border-radius: 3px;
+      user-select: text;
+    }
+    .card-note:focus {
+      background: #e9ecef;
+      border-bottom-color: #007bff;
+      color: #212529;
+    }
+
+    .controls { display: flex; align-items: center; gap: 6px; }
     .btn-step { width: 36px; height: 36px; font-size: 1.2rem; border: none; border-radius: 6px; background: #007bff; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-    .counter-input { width: 80px; height: 36px; text-align: center; font-size: 1.1rem; font-weight: bold; border: 1px solid #ced4da; border-radius: 6px; }
-    .btn-delete { background: transparent; border: none; color: #dc3545; font-size: 1.2rem; cursor: pointer; margin-left: 8px; }
+    .counter-input { width: 70px; height: 36px; text-align: center; font-size: 1.1rem; font-weight: bold; border: 1px solid #ced4da; border-radius: 6px; }
+    .btn-delete { background: transparent; border: none; color: #dc3545; font-size: 1.2rem; cursor: pointer; margin-left: 4px; }
   </style>
 </head>
 <body>
@@ -40,8 +86,10 @@
 
   <script>
     const STORAGE_KEY = 'app_contatori_data_v2';
+    
+    // Inizializzazione dati
     let contatori = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [
-      { id: 1, titolo: 'Flessioni', valore: 10 }
+      { id: 1, titolo: 'Flessioni', nota: 'Aggiungi nota o data...', valore: 10 }
     ];
 
     function salvaStato() {
@@ -60,12 +108,22 @@
       salvaStato();
     }
 
+    function modificaNota(id, nuovaNota) {
+      contatori = contatori.map(c => c.id === id ? { ...c, nota: nuovaNota } : c);
+      salvaStato();
+    }
+
     function aggiungiContatore() {
       const inputTitolo = document.getElementById('nuovoTitolo');
       const titolo = inputTitolo.value.trim();
       if (!titolo) return;
 
-      contatori.push({ id: Date.now(), titolo: titolo, valore: 0 });
+      contatori.push({ 
+        id: Date.now(), 
+        titolo: titolo, 
+        nota: 'Aggiungi nota...', 
+        valore: 0 
+      });
       salvaStato();
       inputTitolo.value = '';
       render();
@@ -81,18 +139,68 @@
       if (e.key === 'Enter') aggiungiContatore();
     }
 
+    // Gestione Drag & Drop
+    let draggedIndex = null;
+
+    function handleDragStart(e, index) {
+      draggedIndex = index;
+      e.target.closest('.card').classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+
+    function handleDrop(e, targetIndex) {
+      e.preventDefault();
+      if (draggedIndex === null || draggedIndex === targetIndex) return;
+
+      // Sposta l'elemento all'interno dell'array
+      const movedItem = contatori.splice(draggedIndex, 1)[0];
+      contatori.splice(targetIndex, 0, movedItem);
+
+      salvaStato();
+      render();
+    }
+
+    function handleDragEnd(e) {
+      const card = e.target.closest('.card');
+      if (card) card.classList.remove('dragging');
+      draggedIndex = null;
+    }
+
     function render() {
       const container = document.getElementById('app');
       container.innerHTML = '';
+
       if (contatori.length === 0) {
         container.innerHTML = '<p style="color: #6c757d;">Nessun contatore. Aggiungine uno!</p>';
         return;
       }
-      contatori.forEach(c => {
+
+      contatori.forEach((c, index) => {
         const card = document.createElement('div');
         card.className = 'card';
+        card.setAttribute('draggable', 'true');
+        
+        // Eventi Drag & Drop
+        card.ondragstart = (e) => handleDragStart(e, index);
+        card.ondragover = (e) => handleDragOver(e);
+        card.ondrop = (e) => handleDrop(e, index);
+        card.ondragend = (e) => handleDragEnd(e);
+
         card.innerHTML = `
-          <span class="card-title">${c.titolo}</span>
+          <div class="drag-handle" title="Trascina per riordinare">☰</div>
+          <div class="card-info">
+            <span class="card-title">${escapeHtml(c.titolo)}</span>
+            <span 
+              class="card-note" 
+              contenteditable="true" 
+              onblur="modificaNota(${c.id}, this.innerText)"
+            >${escapeHtml(c.nota || 'Aggiungi nota...')}</span>
+          </div>
           <div class="controls">
             <button class="btn-step" onclick="modificaPulsante(${c.id}, -1)">-</button>
             <input type="number" class="counter-input" value="${c.valore}" oninput="modificaDiretta(${c.id}, this.value)" />
@@ -104,13 +212,17 @@
       });
     }
 
+    function escapeHtml(text) {
+      return text ? text.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m])) : '';
+    }
+
     render();
 
-    // REGISTRAZIONE SERVICE WORKER PER PWA
+    // REGISTRAZIONE SERVICE WORKER
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js')
-        .then(() => console.log('PWA Service Worker Registrato con successo'))
-        .catch(err => console.error('Errore registrazione PWA:', err));
+        .then(() => console.log('Service Worker Registrato'))
+        .catch(err => console.error('Errore SW:', err));
     }
   </script>
 </body>
