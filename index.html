@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestore Contatori</title>
+  
+  <!-- Collegamento PWA e Colore Barra di Stato Android -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#007bff">
+
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f4f6f8; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+    h2 { margin-bottom: 15px; color: #333; }
+    
+    .add-bar { display: flex; gap: 10px; width: 100%; max-width: 400px; margin-bottom: 20px; }
+    .add-bar input { flex: 1; padding: 10px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
+    .btn-add { padding: 10px 16px; font-size: 1rem; border: none; border-radius: 6px; background: #28a745; color: white; font-weight: bold; cursor: pointer; }
+
+    .card { background: white; border-radius: 8px; padding: 16px; margin-bottom: 12px; width: 100%; max-width: 400px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; }
+    .card-title { font-weight: 600; color: #495057; word-break: break-word; flex: 1; padding-right: 10px; }
+    
+    .controls { display: flex; align-items: center; gap: 8px; }
+    .btn-step { width: 36px; height: 36px; font-size: 1.2rem; border: none; border-radius: 6px; background: #007bff; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .counter-input { width: 80px; height: 36px; text-align: center; font-size: 1.1rem; font-weight: bold; border: 1px solid #ced4da; border-radius: 6px; }
+    .btn-delete { background: transparent; border: none; color: #dc3545; font-size: 1.2rem; cursor: pointer; margin-left: 8px; }
+  </style>
+</head>
+<body>
+
+  <h2>I Miei Contatori</h2>
+
+  <div class="add-bar">
+    <input type="text" id="nuovoTitolo" placeholder="Titolo contatore..." onkeypress="handleKeyPress(event)" />
+    <button class="btn-add" onclick="aggiungiContatore()">+ Aggiungi</button>
+  </div>
+
+  <div id="app" style="width: 100%; display: flex; flex-direction: column; align-items: center;"></div>
+
+  <script>
+    const STORAGE_KEY = 'app_contatori_data_v2';
+    let contatori = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [
+      { id: 1, titolo: 'Flessioni', valore: 10 }
+    ];
+
+    function salvaStato() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(contatori));
+    }
+
+    function modificaPulsante(id, delta) {
+      contatori = contatori.map(c => c.id === id ? { ...c, valore: Number(c.valore) + delta } : c);
+      salvaStato();
+      render();
+    }
+
+    function modificaDiretta(id, nuovoValoreTesto) {
+      const valoreNumerico = parseInt(nuovoValoreTesto, 10);
+      contatori = contatori.map(c => c.id === id ? { ...c, valore: isNaN(valoreNumerico) ? 0 : valoreNumerico } : c);
+      salvaStato();
+    }
+
+    function aggiungiContatore() {
+      const inputTitolo = document.getElementById('nuovoTitolo');
+      const titolo = inputTitolo.value.trim();
+      if (!titolo) return;
+
+      contatori.push({ id: Date.now(), titolo: titolo, valore: 0 });
+      salvaStato();
+      inputTitolo.value = '';
+      render();
+    }
+
+    function rimuoviContatore(id) {
+      contatori = contatori.filter(c => c.id !== id);
+      salvaStato();
+      render();
+    }
+
+    function handleKeyPress(e) {
+      if (e.key === 'Enter') aggiungiContatore();
+    }
+
+    function render() {
+      const container = document.getElementById('app');
+      container.innerHTML = '';
+      if (contatori.length === 0) {
+        container.innerHTML = '<p style="color: #6c757d;">Nessun contatore. Aggiungine uno!</p>';
+        return;
+      }
+      contatori.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <span class="card-title">${c.titolo}</span>
+          <div class="controls">
+            <button class="btn-step" onclick="modificaPulsante(${c.id}, -1)">-</button>
+            <input type="number" class="counter-input" value="${c.valore}" oninput="modificaDiretta(${c.id}, this.value)" />
+            <button class="btn-step" onclick="modificaPulsante(${c.id}, 1)">+</button>
+            <button class="btn-delete" title="Elimina" onclick="rimuoviContatore(${c.id})">🗑️</button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    render();
+
+    // REGISTRAZIONE SERVICE WORKER PER PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js')
+        .then(() => console.log('PWA Service Worker Registrato con successo'))
+        .catch(err => console.error('Errore registrazione PWA:', err));
+    }
+  </script>
+</body>
+</html>
